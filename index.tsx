@@ -68,6 +68,57 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
+// --- Renderizador de Markdown Simples ---
+const FormattedText = ({ text }: { text: string }) => {
+  if (!text) return null;
+
+  // Processa linhas e blocos básicos de Markdown
+  const lines = text.split('\n');
+  return (
+    <div className="space-y-3">
+      {lines.map((line, idx) => {
+        // Títulos (### ou ## ou #)
+        if (line.startsWith('### ')) {
+          return <h3 key={idx} className="text-lg font-bold text-indigo-300 mt-4 mb-2">{line.replace('### ', '')}</h3>;
+        }
+        if (line.startsWith('## ')) {
+          return <h2 key={idx} className="text-xl font-black text-indigo-400 mt-5 mb-3 border-b border-indigo-500/20 pb-1">{line.replace('## ', '')}</h2>;
+        }
+        
+        // Listas (* ou -)
+        if (line.trim().startsWith('* ') || line.trim().startsWith('- ')) {
+          return (
+            <div key={idx} className="flex gap-3 items-start ml-2">
+              <span className="text-indigo-500 mt-1.5">•</span>
+              <span className="flex-1">{parseInline(line.trim().substring(2))}</span>
+            </div>
+          );
+        }
+
+        // Blocos de código (simples)
+        if (line.startsWith('```')) return null; // Ignora tags de bloco de código por enquanto
+
+        // Parágrafo padrão com suporte a negrito inline
+        return <p key={idx} className="leading-relaxed">{parseInline(line)}</p>;
+      })}
+    </div>
+  );
+};
+
+// Parser para negrito **texto** e código inline `código`
+const parseInline = (text: string) => {
+  const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} className="text-white font-bold">{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={i} className="bg-slate-900 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+};
+
 // --- Componente de Guia de Configuração ---
 const ConfigGuide = () => (
   <div className="min-h-screen flex items-center justify-center p-6 bg-[#020617]">
@@ -79,22 +130,22 @@ const ConfigGuide = () => (
       </div>
       <h1 className="text-2xl font-bold text-center mb-2">Configuração Necessária</h1>
       <p className="text-slate-400 text-center text-sm mb-8">
-        Detectamos que a sua chave de API ainda não foi configurada corretamente no Netlify.
+        Sua chave de API não foi detectada. Siga o protocolo abaixo no Netlify:
       </p>
       
       <div className="space-y-4">
         <div className="flex gap-4 items-start">
-          <div className="w-6 h-6 rounded-full bg-indigo-600 flex-shrink-0 flex items-center justify-center text-xs font-bold">1</div>
+          <div className="w-6 h-6 rounded-full bg-indigo-600 flex-shrink-0 flex items-center justify-center text-xs font-bold shadow-lg shadow-indigo-500/20">1</div>
           <div>
-            <p className="text-sm font-semibold">No Netlify, vá em:</p>
+            <p className="text-sm font-semibold">Painel do Netlify:</p>
             <p className="text-xs text-slate-500 italic">Site Settings > Environment Variables</p>
           </div>
         </div>
         
         <div className="flex gap-4 items-start">
-          <div className="w-6 h-6 rounded-full bg-indigo-600 flex-shrink-0 flex items-center justify-center text-xs font-bold">2</div>
+          <div className="w-6 h-6 rounded-full bg-indigo-600 flex-shrink-0 flex items-center justify-center text-xs font-bold shadow-lg shadow-indigo-500/20">2</div>
           <div>
-            <p className="text-sm font-semibold">Crie uma nova variável:</p>
+            <p className="text-sm font-semibold">Adicionar Variável:</p>
             <div className="mt-2 space-y-1">
               <div className="flex justify-between bg-slate-900 p-2 rounded border border-slate-800">
                 <span className="text-[10px] text-slate-500 uppercase font-bold">Key:</span>
@@ -102,17 +153,9 @@ const ConfigGuide = () => (
               </div>
               <div className="flex justify-between bg-slate-900 p-2 rounded border border-slate-800">
                 <span className="text-[10px] text-slate-500 uppercase font-bold">Value:</span>
-                <span className="text-[10px] text-green-400 font-mono">AIzaSy...rs</span>
+                <span className="text-[10px] text-green-400 font-mono italic">Sua Chave AIza...</span>
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="flex gap-4 items-start">
-          <div className="w-6 h-6 rounded-full bg-indigo-600 flex-shrink-0 flex items-center justify-center text-xs font-bold">3</div>
-          <div>
-            <p className="text-sm font-semibold">Salve e faça o Deploy:</p>
-            <p className="text-xs text-slate-500">O Nexus será ativado automaticamente assim que o Netlify injetar a chave.</p>
           </div>
         </div>
       </div>
@@ -120,7 +163,7 @@ const ConfigGuide = () => (
       <div className="mt-8 pt-6 border-t border-slate-800">
         <div className="flex items-center gap-2 text-green-500 justify-center">
           <ShieldCheck size={16} />
-          <span className="text-[10px] font-bold uppercase tracking-widest">Conexão Segura Ativada</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest">Protocolo de Segurança Ativo</span>
         </div>
       </div>
     </div>
@@ -148,7 +191,6 @@ const App = () => {
   const [activeTab, setActiveTab] = useState<'chat' | 'image' | 'video' | 'live'>('chat');
   const [isSidebarOpen, setSidebarOpen] = useState(true);
 
-  // Se a API_KEY não existir, mostramos o guia de configuração
   if (!process.env.API_KEY) {
     return <ConfigGuide />;
   }
@@ -199,7 +241,7 @@ const App = () => {
 
 const ChatView = () => {
   const [messages, setMessages] = useState<{ role: 'user' | 'model', content: string }[]>([
-    { role: 'model', content: 'Iniciando Nexus... Sistemas operacionais. Como posso ajudar hoje?' }
+    { role: 'model', content: 'Iniciando Nexus... Protocolos de organização de texto carregados. Como posso ajudar com seus projetos hoje?' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -225,7 +267,7 @@ const ChatView = () => {
         chatRef.current = ai.chats.create({ 
           model: 'gemini-3-flash-preview',
           config: { 
-            systemInstruction: 'Você é o Nexus, uma inteligência avançada. Responda em Português do Brasil com tom tecnológico e prestativo.',
+            systemInstruction: 'Você é o Nexus, uma inteligência avançada especializada em design, arquitetura e móveis planejados. Use Markdown para organizar suas respostas com títulos (###), listas (*), negrito (**) e parágrafos claros. Responda em Português do Brasil.',
             temperature: 0.8
           }
         });
@@ -246,7 +288,7 @@ const ChatView = () => {
       }
     } catch (e: any) {
       console.error(e);
-      setError("Falha na comunicação com o servidor Nexus. Verifique se a cota da sua API Key não expirou.");
+      setError("Falha na comunicação. Verifique sua cota ou conexão.");
     } finally {
       setLoading(false);
     }
@@ -254,41 +296,41 @@ const ChatView = () => {
 
   return (
     <div className="flex flex-col h-full max-w-4xl mx-auto p-4 animate-fade-in">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-28 px-2">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar space-y-8 pb-32 px-2 pt-4">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
-            <div className={`flex gap-4 max-w-[85%] ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg ${m.role === 'user' ? 'bg-indigo-600' : 'bg-slate-900 border border-indigo-500/30'}`}>
+            <div className={`flex gap-4 max-w-[90%] ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-xl border ${m.role === 'user' ? 'bg-indigo-600 border-indigo-400' : 'bg-slate-900 border-indigo-500/30'}`}>
                 {m.role === 'user' ? <User size={18} /> : <Cpu size={18} className="text-indigo-400" />}
               </div>
-              <div className={`p-4 rounded-2xl text-sm leading-relaxed ${m.role === 'user' ? 'bg-indigo-600 text-white shadow-indigo-500/10' : 'glass border-slate-800 text-slate-200'}`}>
-                {m.content || <div className="flex gap-1 py-1"><div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce" /><div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.2s]" /><div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.4s]" /></div>}
+              <div className={`p-5 rounded-3xl text-[15px] shadow-2xl ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'glass border-slate-800 text-slate-200'}`}>
+                {m.content ? <FormattedText text={m.content} /> : <div className="flex gap-1.5 py-2"><div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" /><div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.2s]" /><div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.4s]" /></div>}
               </div>
             </div>
           </div>
         ))}
         {error && (
-          <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs animate-fade-in">
+          <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-xs animate-fade-in mx-14">
             <AlertCircle size={14} />
             <span>{error}</span>
           </div>
         )}
       </div>
       <div className="absolute bottom-8 left-4 right-4 max-w-4xl mx-auto">
-        <div className="glass border-indigo-500/20 rounded-2xl p-2 flex gap-2 shadow-2xl focus-within:border-indigo-500/50 transition-all">
+        <div className="glass border-indigo-500/20 rounded-3xl p-2.5 flex gap-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] focus-within:border-indigo-500/50 transition-all">
           <input 
             value={input} 
             onChange={e => setInput(e.target.value)} 
             onKeyDown={e => e.key === 'Enter' && sendMessage()}
-            placeholder="Comando Nexus..."
-            className="flex-1 bg-transparent border-none px-4 py-3 text-sm focus:outline-none placeholder-slate-600"
+            placeholder="Digite sua dúvida sobre design ou móveis..."
+            className="flex-1 bg-transparent border-none px-5 py-3 text-sm focus:outline-none placeholder-slate-600"
           />
           <button 
             onClick={sendMessage} 
             disabled={loading || !input.trim()} 
-            className="bg-indigo-600 p-3 rounded-xl hover:bg-indigo-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed group"
+            className="bg-indigo-600 p-3.5 rounded-2xl hover:bg-indigo-500 transition-all disabled:opacity-30 group shadow-lg shadow-indigo-600/30"
           >
-            {loading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
+            {loading ? <Loader2 size={22} className="animate-spin" /> : <Send size={22} className="group-hover:translate-x-1 transition-transform" />}
           </button>
         </div>
       </div>
@@ -309,7 +351,7 @@ const ImageView = () => {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const resp = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
-        contents: [{ text: prompt }]
+        contents: [{ text: `Realismo fotográfico, render 3D de alta qualidade de móveis planejados: ${prompt}` }]
       });
       for (const part of resp.candidates[0].content.parts) {
         if (part.inlineData) {
@@ -318,7 +360,7 @@ const ImageView = () => {
         }
       }
     } catch (e) {
-      alert("Falha ao processar arte. Verifique a configuração da API.");
+      alert("Falha na renderização visual.");
     } finally {
       setLoading(false);
     }
@@ -328,18 +370,18 @@ const ImageView = () => {
     <div className="p-8 h-full flex flex-col items-center overflow-y-auto animate-fade-in custom-scrollbar">
       <div className="max-w-2xl w-full text-center mb-10">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-bold uppercase tracking-widest mb-4">
-          <Sparkles size={12} /> Laboratório Visual
+          <Sparkles size={12} /> Renderizador Visual
         </div>
-        <h1 className="text-4xl font-black mb-2 text-white tracking-tight">Criação Nexus</h1>
-        <p className="text-slate-500 text-sm">Transforme conceitos em realidade digital.</p>
+        <h1 className="text-4xl font-black mb-2 text-white tracking-tight italic">Design Nexus</h1>
+        <p className="text-slate-500 text-sm">Visualize seus projetos de móveis com IA.</p>
       </div>
       <div className="w-full max-w-2xl space-y-6">
         <div className="glass p-6 rounded-3xl border-slate-800 space-y-4 shadow-2xl">
           <textarea 
             value={prompt} 
             onChange={e => setPrompt(e.target.value)}
-            placeholder="Descreva a visão artística..."
-            className="w-full bg-slate-900/50 border border-slate-800 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none resize-none h-28 text-slate-200 placeholder-slate-600 transition-all"
+            placeholder="Ex: Cozinha grafite com ilha central e iluminação embutida..."
+            className="w-full bg-slate-900/50 border border-slate-800 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none resize-none h-28 text-slate-200"
           />
           <button 
             onClick={generate} 
@@ -347,16 +389,16 @@ const ImageView = () => {
             className="w-full bg-indigo-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-indigo-500 transition-all disabled:opacity-30 shadow-lg shadow-indigo-600/20"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : <Zap size={20} />}
-            {loading ? 'SINTETIZANDO...' : 'EXECUTAR CRIAÇÃO'}
+            {loading ? 'RENDERIZANDO...' : 'CRIAR PROJETO VISUAL'}
           </button>
         </div>
-        <div className="glass aspect-square rounded-3xl overflow-hidden flex items-center justify-center bg-slate-900/40 border border-slate-800/50 shadow-inner group relative">
+        <div className="glass aspect-video rounded-3xl overflow-hidden flex items-center justify-center bg-slate-900/40 border border-slate-800 shadow-inner">
           {img ? (
-            <img src={img} className="w-full h-full object-cover animate-fade-in hover:scale-105 transition-transform duration-700" alt="Output" />
+            <img src={img} className="w-full h-full object-cover animate-fade-in" alt="Output" />
           ) : (
             <div className="flex flex-col items-center gap-4 text-slate-700">
               <ImageIcon size={64} strokeWidth={1} />
-              <span className="text-[10px] uppercase font-black tracking-widest">Aguardando Input</span>
+              <span className="text-[10px] uppercase font-black tracking-widest">Aguardando Projeto</span>
             </div>
           )}
         </div>
@@ -374,53 +416,31 @@ const VideoView = () => {
 
   const generate = async () => {
     if (!image || !prompt.trim() || isGenerating) return;
-
-    const as = (window as any).aistudio;
-    if (as && typeof as.hasSelectedApiKey === 'function') {
-      if (!(await as.hasSelectedApiKey())) {
-        if (typeof as.openSelectKey === 'function') await as.openSelectKey();
-      }
-    }
-
     setIsGenerating(true);
     setVideoUrl(null);
-    setStatus('Iniciando Motor Veo...');
-
+    setStatus('Iniciando Veo Engine...');
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      let operation;
-      try {
-        operation = await ai.models.generateVideos({
-          model: 'veo-3.1-fast-generate-preview',
-          prompt,
-          image: { imageBytes: image.base64, mimeType: image.mime },
-          config: { numberOfVideos: 1, resolution: '720p', aspectRatio: '16:9' }
-        });
-      } catch (err: any) {
-        if (err.message?.includes("not found") || err.message?.includes("404")) {
-          setStatus('Chave GCP com Billing Necessária.');
-          if (as && typeof as.openSelectKey === 'function') await as.openSelectKey();
-          setIsGenerating(false);
-          return;
-        }
-        throw err;
-      }
-
+      let operation = await ai.models.generateVideos({
+        model: 'veo-3.1-fast-generate-preview',
+        prompt,
+        image: { imageBytes: image.base64, mimeType: image.mime },
+        config: { numberOfVideos: 1, resolution: '720p', aspectRatio: '16:9' }
+      });
       while (!operation.done) {
-        setStatus("Processando Redes Neurais...");
+        setStatus("Processando Animação...");
         await new Promise(r => setTimeout(r, 10000));
         operation = await ai.operations.getVideosOperation({ operation: operation });
       }
-
       const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
       if (uri) {
         const resp = await fetch(`${uri}&key=${process.env.API_KEY}`);
         const blob = await resp.blob();
         setVideoUrl(URL.createObjectURL(blob));
-        setStatus('Renderização Completa');
+        setStatus('Completo');
       }
     } catch (e: any) {
-      setStatus('Erro Crítico no Motor');
+      setStatus('Erro no Processamento');
     } finally {
       setIsGenerating(false);
     }
@@ -429,26 +449,18 @@ const VideoView = () => {
   return (
     <div className="p-8 h-full flex flex-col items-center overflow-y-auto animate-fade-in custom-scrollbar">
       <div className="max-w-4xl w-full text-center mb-12">
-        <h1 className="text-5xl font-black text-amber-500 mb-2 tracking-tighter italic">Nexus Veo</h1>
-        <p className="text-slate-500 text-sm">Animação Cinematográfica Inteligente</p>
+        <h1 className="text-5xl font-black text-amber-500 mb-2 tracking-tighter italic">Veo Studio</h1>
+        <p className="text-slate-500 text-sm">Animação fluida para apresentações de design.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-10 w-full max-w-6xl">
         <div className="space-y-6">
-          <div className="glass aspect-video rounded-3xl border-dashed border-2 border-slate-700 flex flex-col items-center justify-center p-4 cursor-pointer relative overflow-hidden hover:border-amber-500/50 transition-all group">
+          <div className="glass aspect-video rounded-3xl border-dashed border-2 border-slate-700 flex flex-col items-center justify-center p-4 cursor-pointer hover:border-amber-500/50 transition-all relative">
             {image ? (
-              <div className="w-full h-full relative group">
-                <img src={`data:${image.mime};base64,${image.base64}`} className="w-full h-full object-cover rounded-2xl" alt="Base" />
-                <button onClick={() => setImage(null)} className="absolute top-4 right-4 bg-red-500 p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><XCircle size={18}/></button>
-              </div>
+              <img src={`data:${image.mime};base64,${image.base64}`} className="w-full h-full object-cover rounded-2xl" alt="Base" />
             ) : (
               <label className="flex flex-col items-center gap-4 cursor-pointer w-full h-full justify-center">
-                <div className="p-4 bg-slate-900 rounded-full group-hover:scale-110 transition-transform">
-                  <Upload size={32} className="text-slate-500" />
-                </div>
-                <div className="text-center">
-                  <span className="text-xs text-slate-400 font-bold uppercase tracking-widest block">Upload Frame Zero</span>
-                  <span className="text-[10px] text-slate-600 block mt-1">Formatos sugeridos: JPG, PNG</span>
-                </div>
+                <Upload size={32} className="text-slate-600" />
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-widest">Base do Projeto</span>
                 <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
                   const f = e.target.files?.[0];
                   if (f) setImage({ base64: await blobToBase64(f), mime: f.type });
@@ -456,28 +468,17 @@ const VideoView = () => {
               </label>
             )}
           </div>
-          <div className="glass p-5 rounded-3xl space-y-4 shadow-xl">
-            <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Descreva a dinâmica do vídeo..." className="w-full bg-transparent border-none text-slate-200 focus:ring-0 outline-none resize-none h-24 text-sm placeholder-slate-600" />
-            <button onClick={generate} disabled={isGenerating || !image} className="w-full bg-gradient-to-r from-amber-600 to-orange-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all disabled:opacity-30 shadow-lg shadow-amber-600/20 active:scale-95">
+          <div className="glass p-5 rounded-3xl space-y-4">
+            <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Movimento (ex: câmera deslizando pela bancada)..." className="w-full bg-transparent border-none text-slate-200 outline-none resize-none h-20 text-sm" />
+            <button onClick={generate} disabled={isGenerating || !image} className="w-full bg-amber-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all disabled:opacity-30 shadow-lg shadow-amber-600/20">
               {isGenerating ? <Loader2 className="animate-spin" size={20} /> : <Play size={20} fill="currentColor" />}
-              {isGenerating ? 'RENDERIZANDO...' : 'INICIAR ENGINE'}
+              {isGenerating ? 'PROCESSANDO...' : 'ANIMAR PROJETO'}
             </button>
           </div>
-          {status && <p className="text-center text-[10px] uppercase font-black text-amber-500 tracking-[0.3em] animate-pulse">{status}</p>}
+          {status && <p className="text-center text-[10px] uppercase font-black text-amber-500 tracking-widest animate-pulse">{status}</p>}
         </div>
-        <div className="glass aspect-video rounded-3xl flex items-center justify-center bg-black/60 border border-slate-800 shadow-2xl relative overflow-hidden">
-          {videoUrl ? (
-            <video src={videoUrl} controls autoPlay loop className="w-full h-full object-contain" />
-          ) : (
-            <div className="flex flex-col items-center gap-4 text-slate-800">
-               <Video size={64} strokeWidth={1} />
-               <span className="text-[10px] font-black uppercase tracking-[0.2em]">Output Cinematográfico</span>
-            </div>
-          )}
-          {isGenerating && <div className="absolute inset-0 bg-indigo-950/20 backdrop-blur-sm flex items-center justify-center flex-col gap-4">
-            <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-[10px] font-bold text-indigo-400 tracking-widest">SINTETIZANDO FRAMES...</span>
-          </div>}
+        <div className="glass aspect-video rounded-3xl flex items-center justify-center bg-black/40 border border-slate-800 shadow-2xl">
+          {videoUrl ? <video src={videoUrl} controls autoPlay loop className="w-full h-full object-contain" /> : <Video size={64} className="opacity-10 text-amber-500" />}
         </div>
       </div>
     </div>
@@ -515,7 +516,7 @@ const LiveView = () => {
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         callbacks: {
-          onopen: () => { setIsActive(true); setStatus('Transmissão Ativa'); },
+          onopen: () => { setIsActive(true); setStatus('Voz Ativa'); },
           onmessage: async (m: LiveServerMessage) => {
             const base64 = m.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64) {
@@ -532,7 +533,7 @@ const LiveView = () => {
             if (m.serverContent?.outputTranscription) setTranscription(p => [...p.slice(-5), `Nexus: ${m.serverContent?.outputTranscription?.text}`]);
           },
           onclose: () => stop(),
-          onerror: (e) => { console.error(e); stop(); }
+          onerror: () => stop()
         },
         config: {
           responseModalities: [Modality.AUDIO],
@@ -552,51 +553,32 @@ const LiveView = () => {
         sessionRef.current?.sendRealtimeInput({ media: { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } });
       };
       source.connect(processor); processor.connect(inputCtx.destination);
-    } catch (e) { 
-      setStatus('Erro Periférico'); 
-      console.error(e);
-    }
+    } catch (e) { setStatus('Erro Periférico'); }
   };
 
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 animate-fade-in relative">
       <div className="absolute top-12 text-center">
-        <h2 className="text-3xl font-black text-white tracking-tighter uppercase mb-2">Nexus Live Audio</h2>
-        <p className="text-slate-500 text-xs tracking-widest uppercase">Protocolo de Voz Real-time</p>
+        <h2 className="text-3xl font-black text-white tracking-tighter uppercase mb-2">Nexus Live</h2>
+        <p className="text-slate-500 text-xs tracking-widest uppercase">Consultoria de Design por Voz</p>
       </div>
 
-      <div className="relative group">
-         <div className={`absolute inset-0 rounded-full blur-3xl transition-all duration-1000 ${isActive ? 'bg-indigo-500/30 scale-150' : 'bg-transparent'}`} />
-         <button 
-          onClick={start} 
-          className={`w-48 h-48 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl relative z-10 border-4 ${
-            isActive ? 'bg-indigo-600 border-indigo-400 scale-95 shadow-indigo-500/40' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/50'
-          }`}
-        >
-          {isActive ? <MicOff size={64} className="text-white" /> : <Mic size={64} className="text-indigo-400" />}
-          {isActive && (
-            <>
-              <div className="absolute inset-0 rounded-full border-2 border-indigo-400 animate-ping opacity-50" />
-              <div className="absolute inset-0 rounded-full border-4 border-indigo-400/20 animate-pulse" />
-            </>
-          )}
-        </button>
-      </div>
+      <button onClick={start} className={`w-48 h-48 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl relative z-10 border-4 ${isActive ? 'bg-indigo-600 border-indigo-400 scale-95 shadow-indigo-500/40' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/50'}`}>
+        {isActive ? <MicOff size={64} className="text-white" /> : <Mic size={64} className="text-indigo-400" />}
+        {isActive && <div className="absolute inset-0 rounded-full border-2 border-indigo-400 animate-ping opacity-50" />}
+      </button>
 
-      <div className="mt-20 w-full max-w-lg glass rounded-3xl p-8 min-h-[220px] flex flex-col gap-6 border border-slate-800 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-white/5 pb-4">
-           <div className="flex items-center gap-2 text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em]">
-            <Volume2 size={14} /> {status}
-          </div>
-          {isActive && <div className="flex gap-1"><div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" /></div>}
+      <div className="mt-20 w-full max-w-lg glass rounded-3xl p-8 min-h-[220px] border border-slate-800 shadow-2xl flex flex-col gap-6">
+        <div className="flex items-center gap-2 text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em] border-b border-white/5 pb-4">
+          <Volume2 size={14} /> Status: {status}
         </div>
-        <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar max-h-40">
+        <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar max-h-40 text-xs">
           {transcription.map((t, i) => (
-            <div key={i} className={`text-xs animate-fade-in ${t.startsWith('Você') ? 'text-slate-500' : 'text-white font-semibold pl-2 border-l-2 border-indigo-500'}`}>
+            <div key={i} className={`animate-fade-in ${t.startsWith('Você') ? 'text-slate-500' : 'text-white font-semibold pl-2 border-l-2 border-indigo-500'}`}>
               {t}
             </div>
           ))}
-          {transcription.length === 0 && <p className="text-slate-700 italic text-[10px] text-center pt-10 uppercase tracking-widest font-black">Aguardando Frequência...</p>}
+          {transcription.length === 0 && <p className="text-slate-700 italic text-[10px] text-center pt-10 uppercase tracking-widest font-black">Aguardando Voz...</p>}
         </div>
       </div>
     </div>
