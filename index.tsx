@@ -34,8 +34,25 @@ import {
   Download,
   FileDown,
   RefreshCw,
-  Square
+  Square,
+  Plus,
+  Trash2,
+  History
 } from 'lucide-react';
+
+// --- Interfaces ---
+interface Message {
+  role: 'user' | 'model';
+  content: string;
+  isCancelled?: boolean;
+}
+
+interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  timestamp: number;
+}
 
 // --- Utilitários ---
 const decode = (base64: string) => {
@@ -77,7 +94,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
-// --- Componente de Sandbox (Visualizador de Código) ---
+// --- Componente de Sandbox ---
 const CodeSandbox = ({ code, isOpen, onClose }: { code: string; isOpen: boolean; onClose: () => void }) => {
   if (!isOpen) return null;
 
@@ -122,7 +139,7 @@ const CodeSandbox = ({ code, isOpen, onClose }: { code: string; isOpen: boolean;
 };
 
 // --- Componente de Bloco de Código ---
-const CodeBlock: React.FC<{ code: string; language?: string; isStreaming?: boolean }> = ({ code, language, isStreaming }) => {
+const CodeBlock: React.FC<{ code: string; language?: string; isStreaming?: boolean; isCancelled?: boolean }> = ({ code, language, isStreaming, isCancelled }) => {
   const [copied, setCopied] = useState(false);
   const [sandboxOpen, setSandboxOpen] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
@@ -146,7 +163,7 @@ const CodeBlock: React.FC<{ code: string; language?: string; isStreaming?: boole
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `nexus_full_output.${extension}`;
+    link.download = `nexus_output.${extension}`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -158,15 +175,19 @@ const CodeBlock: React.FC<{ code: string; language?: string; isStreaming?: boole
       <div className="bg-slate-900 border border-slate-800 border-b-0 rounded-t-2xl px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="flex gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500/40" />
-            <div className="w-2.5 h-2.5 rounded-full bg-amber-500/40" />
-            <div className="w-2.5 h-2.5 rounded-full bg-green-500/40" />
+            <div className={`w-2.5 h-2.5 rounded-full ${isStreaming ? 'bg-amber-500 animate-pulse' : 'bg-red-500/40'}`} />
+            <div className={`w-2.5 h-2.5 rounded-full ${isStreaming ? 'bg-amber-500 animate-pulse [animation-delay:0.2s]' : 'bg-amber-500/40'}`} />
+            <div className={`w-2.5 h-2.5 rounded-full ${isStreaming ? 'bg-amber-500 animate-pulse [animation-delay:0.4s]' : 'bg-green-500/40'}`} />
           </div>
           <span className="text-[10px] font-mono text-slate-500 ml-2 uppercase tracking-widest flex items-center gap-2">
             {isStreaming ? (
-              <span className="flex items-center gap-2 text-indigo-400 font-bold animate-pulse">
+              <span className="flex items-center gap-2 text-indigo-400 font-bold">
                 <RefreshCw size={10} className="animate-spin" /> 
-                RECONSTRUINDO ARQUIVO COMPLETO...
+                PROCESSANDO...
+              </span>
+            ) : isCancelled ? (
+              <span className="text-red-400 font-bold flex items-center gap-1">
+                <Square size={10} /> INTERROMPIDO
               </span>
             ) : (
               `${language || 'source'}`
@@ -189,13 +210,7 @@ const CodeBlock: React.FC<{ code: string; language?: string; isStreaming?: boole
                 onClick={downloadFile}
                 className="p-1.5 hover:bg-green-600 text-slate-200 hover:text-white rounded-lg transition-all flex items-center gap-1 text-[10px] font-bold bg-green-900/20 border border-green-500/20"
               >
-                <FileDown size={10} /> BAIXAR COMPLETO
-              </button>
-              <button 
-                onClick={copyToClipboard}
-                className="p-1.5 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all flex items-center gap-1 text-[10px] font-bold"
-              >
-                {copied ? <Check size={10} className="text-green-400" /> : <Copy size={10} />} COPIAR
+                <FileDown size={10} /> BAIXAR
               </button>
             </>
           )}
@@ -207,7 +222,7 @@ const CodeBlock: React.FC<{ code: string; language?: string; isStreaming?: boole
           ref={preRef}
           className={`bg-[#010409] p-5 pt-4 overflow-x-auto font-mono text-[13px] text-indigo-100/90 shadow-inner max-h-[600px] custom-scrollbar transition-all ${isStreaming ? 'ring-1 ring-indigo-500/10' : ''}`}
         >
-          <code className="block leading-relaxed">
+          <code className="block leading-relaxed whitespace-pre-wrap">
             {code}
             {isStreaming && <span className="inline-block w-2 h-4 bg-indigo-500 ml-1 animate-pulse align-middle" />}
           </code>
@@ -219,7 +234,7 @@ const CodeBlock: React.FC<{ code: string; language?: string; isStreaming?: boole
 };
 
 // --- Renderizador de Markdown ---
-const FormattedText = ({ text, isStreaming }: { text: string; isStreaming?: boolean }) => {
+const FormattedText = ({ text, isStreaming, isCancelled }: { text: string; isStreaming?: boolean; isCancelled?: boolean }) => {
   if (!text) return null;
 
   const lines = text.split('\n');
@@ -231,7 +246,7 @@ const FormattedText = ({ text, isStreaming }: { text: string; isStreaming?: bool
   lines.forEach((line, idx) => {
     if (line.trim().startsWith('```')) {
       if (isCodeBlock) {
-        elements.push(<CodeBlock key={`code-${idx}`} code={currentCodeBlock.join('\n')} language={currentLanguage} isStreaming={false} />);
+        elements.push(<CodeBlock key={`code-${idx}`} code={currentCodeBlock.join('\n')} language={currentLanguage} isStreaming={false} isCancelled={isCancelled} />);
         currentCodeBlock = [];
         isCodeBlock = false;
         currentLanguage = '';
@@ -266,7 +281,7 @@ const FormattedText = ({ text, isStreaming }: { text: string; isStreaming?: bool
   });
 
   if (isCodeBlock) {
-    elements.push(<CodeBlock key="streaming-code" code={currentCodeBlock.join('\n')} language={currentLanguage} isStreaming={true} />);
+    elements.push(<CodeBlock key="streaming-code" code={currentCodeBlock.join('\n')} language={currentLanguage} isStreaming={isStreaming} isCancelled={isCancelled} />);
   }
 
   return (
@@ -325,6 +340,64 @@ const NavItem = ({ icon, label, active, onClick, collapsed }: any) => (
 const App = () => {
   const [activeTab, setActiveTab] = useState<'chat' | 'image' | 'video' | 'live'>('chat');
   const [isSidebarOpen, setSidebarOpen] = useState(true);
+  
+  // Persistência de sessões
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+    const saved = localStorage.getItem('nexus_sessions');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_sessions', JSON.stringify(sessions));
+  }, [sessions]);
+
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+
+  const createNewSession = () => {
+    const id = Date.now().toString();
+    const newSession: ChatSession = {
+      id,
+      title: 'Nova Conversa',
+      messages: [{ role: 'model', content: 'Protocolos Nexus ativos. Envie arquivos ou códigos para análise. Eu entregarei a reconstrução completa.' }],
+      timestamp: Date.now()
+    };
+    setSessions([newSession, ...sessions]);
+    setActiveSessionId(id);
+    setActiveTab('chat');
+  };
+
+  const deleteSession = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSessions(sessions.filter(s => s.id !== id));
+    if (activeSessionId === id) setActiveSessionId(null);
+  };
+
+  const updateSessionMessages = (messages: Message[]) => {
+    if (!activeSessionId) {
+      // Se não houver sessão ativa, criar uma automaticamente
+      const id = Date.now().toString();
+      const firstUserMsg = messages.find(m => m.role === 'user')?.content || 'Nova Conversa';
+      const title = firstUserMsg.slice(0, 30) + (firstUserMsg.length > 30 ? '...' : '');
+      const newSession: ChatSession = { id, title, messages, timestamp: Date.now() };
+      setSessions([newSession, ...sessions]);
+      setActiveSessionId(id);
+      return;
+    }
+
+    setSessions(sessions.map(s => {
+      if (s.id === activeSessionId) {
+        // Atualiza título se for a primeira mensagem do usuário
+        let title = s.title;
+        if (s.messages.length <= 1 && messages.length > 1) {
+          const firstUserMsg = messages.find(m => m.role === 'user')?.content || 'Conversa';
+          title = firstUserMsg.slice(0, 30) + (firstUserMsg.length > 30 ? '...' : '');
+        }
+        return { ...s, messages, title };
+      }
+      return s;
+    }));
+  };
 
   if (!process.env.API_KEY) return <ConfigGuide />;
 
@@ -332,17 +405,61 @@ const App = () => {
     <div className="flex h-screen w-full bg-[#020617] text-slate-100 overflow-hidden font-sans">
       <aside className={`transition-all duration-500 ${isSidebarOpen ? 'w-64' : 'w-20'} glass border-r border-slate-800 flex flex-col z-20`}>
         <div className="p-6 flex items-center gap-3">
-          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-2 rounded-xl">
+          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-2 rounded-xl shadow-lg shadow-indigo-500/20">
             <Cpu size={24} className="text-white" />
           </div>
           {isSidebarOpen && <span className="font-bold text-xl tracking-tighter">NEXUS IA</span>}
         </div>
-        <nav className="flex-1 px-4 space-y-2 mt-8">
+
+        <div className="px-4 mb-4">
+          <button 
+            onClick={createNewSession}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all border border-indigo-500/30 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 group overflow-hidden`}
+          >
+            <Plus size={20} className="group-hover:rotate-90 transition-transform" />
+            {isSidebarOpen && <span className="font-bold text-xs uppercase tracking-widest whitespace-nowrap">Novo Chat</span>}
+          </button>
+        </div>
+
+        <nav className="flex-shrink-0 px-4 space-y-2">
           <NavItem icon={<MessageSquare size={20} />} label="Inteligência" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} collapsed={!isSidebarOpen} />
           <NavItem icon={<ImageIcon size={20} />} label="Artes Visuais" active={activeTab === 'image'} onClick={() => setActiveTab('image')} collapsed={!isSidebarOpen} />
           <NavItem icon={<Video size={20} />} label="Nexus Veo" active={activeTab === 'video'} onClick={() => setActiveTab('video')} collapsed={!isSidebarOpen} />
           <NavItem icon={<Mic size={20} />} label="Live Voice" active={activeTab === 'live'} onClick={() => setActiveTab('live')} collapsed={!isSidebarOpen} />
         </nav>
+
+        {isSidebarOpen && (
+          <div className="flex-1 overflow-y-auto custom-scrollbar mt-6 px-4 space-y-1">
+            <div className="flex items-center gap-2 px-2 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 border-b border-white/5 mb-2">
+              <History size={12} /> Histórico de Pesquisa
+            </div>
+            {sessions.map(s => (
+              <div 
+                key={s.id} 
+                onClick={() => { setActiveSessionId(s.id); setActiveTab('chat'); }}
+                className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border ${activeSessionId === s.id ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-100' : 'hover:bg-slate-800/50 border-transparent text-slate-400'}`}
+              >
+                <div className="flex flex-col gap-0.5 overflow-hidden">
+                  <span className="text-xs font-bold truncate leading-tight">{s.title}</span>
+                  <span className="text-[9px] opacity-40">{new Date(s.timestamp).toLocaleDateString()}</span>
+                </div>
+                <button 
+                  onClick={(e) => deleteSession(s.id, e)}
+                  className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-slate-500 hover:text-red-400 rounded-lg transition-all"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+            {sessions.length === 0 && (
+              <div className="p-10 text-center flex flex-col items-center gap-3 opacity-20">
+                <MessageSquare size={32} />
+                <span className="text-[10px] font-bold uppercase tracking-widest">Vazio</span>
+              </div>
+            )}
+          </div>
+        )}
+
         <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-6 text-slate-500 hover:text-white flex justify-center group">
           <ChevronRight size={18} className={`transition-transform duration-500 ${isSidebarOpen ? 'rotate-180' : ''}`} />
         </button>
@@ -351,7 +468,12 @@ const App = () => {
       <main className="flex-1 relative flex flex-col overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(79,70,229,0.1),_transparent_50%)] pointer-events-none" />
         <div className="flex-1 relative z-10 overflow-hidden">
-          {activeTab === 'chat' && <ChatView />}
+          {activeTab === 'chat' && (
+            <ChatView 
+              messages={activeSession ? activeSession.messages : [{ role: 'model', content: 'Inicie uma conversa ou selecione uma no histórico.' }]} 
+              setMessages={updateSessionMessages}
+            />
+          )}
           {activeTab === 'image' && <ImageView />}
           {activeTab === 'video' && <VideoView />}
           {activeTab === 'live' && <LiveView />}
@@ -361,31 +483,27 @@ const App = () => {
   );
 };
 
-const ChatView = () => {
-  const [messages, setMessages] = useState<{ role: 'user' | 'model', content: string }[]>([
-    { role: 'model', content: 'Protocolos Nexus ativos. Envie arquivos de qualquer tamanho para análise. Eu entregarei a reconstrução **COMPLETA** do código para você baixar.' }
-  ]);
+const ChatView = ({ messages, setMessages }: { messages: Message[], setMessages: (m: Message[]) => void }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatRef = useRef<any>(null);
+  const isCancelledRef = useRef<boolean>(false);
 
   const scrollToBottom = () => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, isStreaming]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -398,54 +516,58 @@ const ChatView = () => {
     }
   };
 
+  const stopGeneration = () => {
+    isCancelledRef.current = true;
+    setLoading(false);
+    setIsStreaming(false);
+  };
+
   const sendMessage = async () => {
     if ((!input.trim() && !attachedFile) || loading) return;
 
+    isCancelledRef.current = false;
     let promptMessage = input;
     if (attachedFile) {
-      promptMessage = `RECONSTRUA E CORRIJA O ARQUIVO COMPLETO: [${attachedFile.name}].\nNÃO TRUNQUE O CÓDIGO. ENTREGUE CADA LINHA, DO INÍCIO AO FIM, SEM RESUMOS.\nInstruções extras: ${input || 'Correção completa e otimização.'}\n\nCONTEÚDO DO ARQUIVO:\n\`\`\`\n${attachedFile.content}\n\`\`\``;
+      promptMessage = `RECONSTRUA E CORRIJA O ARQUIVO COMPLETO: [${attachedFile.name}].\nNÃO TRUNQUE O CÓDIGO. ENTREGUE CADA LINHA.\nInstruções: ${input || 'Correção.'}\n\nCONTEÚDO:\n\`\`\`\n${attachedFile.content}\n\`\`\``;
     }
 
-    const userDisplayMessage = input || `Corrigindo: ${attachedFile?.name}`;
+    const userDisplayMessage = input || `Análise de arquivo: ${attachedFile?.name}`;
+    const newMessages: Message[] = [...messages, { role: 'user', content: userDisplayMessage }];
+    
     setInput('');
     setAttachedFile(null);
     setError(null);
-    setMessages(prev => [...prev, { role: 'user', content: userDisplayMessage }]);
+    setMessages(newMessages);
     setLoading(true);
-    setIsStreaming(true);
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      if (!chatRef.current) {
-        chatRef.current = ai.chats.create({ 
-          model: 'gemini-3-pro-preview',
-          config: { 
-            systemInstruction: 'Você é o NEXUS CORE, um engenheiro de software de elite. Sua regra de ouro é: NUNCA trunque código. Ao corrigir ou reconstruir um arquivo, você DEVE fornecer o conteúdo COMPLETO, linha por linha, dentro de um bloco de código markdown apropriado. Se o arquivo for grande, continue escrevendo até terminar. Sua resposta deve ser em Português do Brasil.',
-            temperature: 0.1
-          }
-        });
-      }
+      chatRef.current = ai.chats.create({ 
+        model: 'gemini-3-pro-preview',
+        config: { 
+          systemInstruction: 'Você é o NEXUS CORE. NUNCA trunque respostas de código. Forneça o conteúdo COMPLETO, linha por linha. Responda em Português do Brasil.',
+          temperature: 0.1
+        }
+      });
 
+      setIsStreaming(true);
       const streamResponse = await chatRef.current.sendMessageStream({ message: promptMessage });
       let fullContent = '';
-      setMessages(prev => [...prev, { role: 'model', content: '' }]);
+      const modelMsgIdx = newMessages.length;
+      const updatedMessages: Message[] = [...newMessages, { role: 'model', content: '' }];
+      setMessages(updatedMessages);
 
       for await (const chunk of streamResponse) {
+        if (isCancelledRef.current) {
+          setMessages(updatedMessages.map((m, i) => i === modelMsgIdx ? { ...m, content: fullContent, isCancelled: true } : m));
+          break;
+        }
         const text = (chunk as GenerateContentResponse).text;
         fullContent += text;
-        setMessages(prev => {
-          const updated = [...prev];
-          updated[updated.length - 1].content = fullContent;
-          return updated;
-        });
-        // Scroll extra agressivo para acompanhar a escrita rápida de códigos longos
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
+        setMessages(updatedMessages.map((m, i) => i === modelMsgIdx ? { ...m, content: fullContent } : m));
       }
     } catch (e: any) {
-      setError("Erro na conexão com o Core Engine. O arquivo pode ser muito extenso para uma única sessão ou houve falha na rede.");
-      console.error(e);
+      if (!isCancelledRef.current) setError("Erro na conexão central. Verifique a API Key.");
     } finally {
       setLoading(false);
       setIsStreaming(false);
@@ -463,7 +585,7 @@ const ChatView = () => {
               </div>
               <div className={`p-6 rounded-[2rem] text-[15px] shadow-2xl relative ${m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-sm' : 'glass border-slate-800 text-slate-200 rounded-tl-sm w-full'}`}>
                 {m.content ? (
-                  <FormattedText text={m.content} isStreaming={isStreaming && i === messages.length - 1} />
+                  <FormattedText text={m.content} isStreaming={isStreaming && i === messages.length - 1} isCancelled={m.isCancelled} />
                 ) : (
                   <div className="flex gap-1.5 py-2">
                     <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" />
@@ -471,11 +593,12 @@ const ChatView = () => {
                     <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.4s]" />
                   </div>
                 )}
+                {m.isCancelled && <div className="mt-4 flex items-center gap-2 text-[10px] text-red-400 font-bold uppercase tracking-widest"><AlertCircle size={10} /> Interrompido</div>}
               </div>
             </div>
           </div>
         ))}
-        {error && <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-xs mx-14 flex items-center gap-2"><AlertCircle size={14}/> {error}</div>}
+        {error && <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-xs mx-14 flex items-center gap-2 animate-bounce"><AlertCircle size={14}/> {error}</div>}
       </div>
 
       <div className="absolute bottom-8 left-4 right-4 max-w-5xl mx-auto flex flex-col gap-4">
@@ -490,39 +613,34 @@ const ChatView = () => {
         )}
         
         <div className="glass border-white/10 rounded-[2.5rem] p-4 flex gap-3 shadow-[0_20px_50px_rgba(0,0,0,0.6)] focus-within:border-indigo-500/50 transition-all items-end">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            className="hidden" 
-            onChange={handleFileUpload}
-            accept=".txt,.js,.css,.html,.ts,.tsx,.json,.md,.py,.cpp,.java,.sh,.sql,.yaml,.xml" 
-          />
+          <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
           <button 
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => fileInputRef.current?.click()} 
             disabled={loading}
-            className="p-4 rounded-full hover:bg-slate-800 text-slate-400 transition-all flex-shrink-0 group disabled:opacity-30"
-            title="Upload de arquivo para correção"
+            className="p-4 rounded-full hover:bg-slate-800 text-slate-400 transition-all flex-shrink-0 disabled:opacity-30"
           >
-            <Paperclip size={20} className="group-hover:rotate-12 transition-transform" />
+            <Paperclip size={20} />
           </button>
           
           <textarea 
             value={input} 
             onChange={e => setInput(e.target.value)} 
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())}
-            placeholder={attachedFile ? "Pressione Enter para iniciar a reconstrução completa..." : "Descreva seu problema ou anexe um arquivo..."}
+            placeholder="Nexus IA Core Engine Pronto..."
             className="flex-1 bg-transparent border-none px-2 py-3 text-sm focus:outline-none placeholder-slate-600 resize-none max-h-40 min-h-[44px] custom-scrollbar"
             rows={1}
             disabled={loading}
           />
           
-          <button 
-            onClick={sendMessage} 
-            disabled={loading || (!input.trim() && !attachedFile)} 
-            className="bg-indigo-600 p-4 rounded-[1.5rem] hover:bg-indigo-500 transition-all disabled:opacity-30 group shadow-lg shadow-indigo-600/30 flex-shrink-0"
-          >
-            {loading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
-          </button>
+          {loading ? (
+            <button onClick={stopGeneration} className="bg-red-600 p-4 rounded-[1.5rem] hover:bg-red-500 transition-all shadow-lg shadow-red-600/30 flex-shrink-0 animate-pulse">
+              <Square size={20} fill="white" />
+            </button>
+          ) : (
+            <button onClick={sendMessage} disabled={!input.trim() && !attachedFile} className="bg-indigo-600 p-4 rounded-[1.5rem] hover:bg-indigo-500 transition-all disabled:opacity-30 group shadow-lg shadow-indigo-600/30 flex-shrink-0">
+              <Send size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -532,14 +650,14 @@ const ChatView = () => {
 const ImageView = () => (
   <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-4 animate-fade-in">
     <ImageIcon size={64} className="opacity-20" />
-    <span className="text-xs uppercase font-black tracking-widest">Interface Vision em Calibração</span>
+    <span className="text-xs uppercase font-black tracking-widest">Vision Lab em Calibração</span>
   </div>
 );
 
 const VideoView = () => (
   <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-4 animate-fade-in">
     <Video size={64} className="opacity-20" />
-    <span className="text-xs uppercase font-black tracking-widest">Veo Engine Indisponível</span>
+    <span className="text-xs uppercase font-black tracking-widest">Veo Engine Offline</span>
   </div>
 );
 
