@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
   GoogleGenAI, 
-  Modality, 
-  GenerateContentResponse,
-  LiveServerMessage 
+  Modality,
+  LiveServerMessage,
+  GenerateContentResponse
 } from "@google/genai";
 import { 
   MessageSquare, 
@@ -14,49 +13,41 @@ import {
   MicOff, 
   Send, 
   Sparkles, 
-  History, 
   Zap,
   Loader2,
-  Terminal,
   Cpu,
   Video,
   Upload,
   Play,
-  Download,
-  AlertCircle,
-  Key
+  XCircle,
+  Volume2,
+  User,
+  ChevronRight,
+  AlertCircle
 } from 'lucide-react';
 
-// --- Utilitários ---
-function decode(base64: string) {
+// --- Utilitários de Áudio ---
+const decode = (base64: string) => {
   const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);
   }
   return bytes;
-}
+};
 
-function encode(bytes: Uint8Array) {
+const encode = (bytes: Uint8Array) => {
   let binary = '';
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
+  for (let i = 0; i < bytes.byteLength; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
-}
+};
 
-async function decodeAudioData(
-  data: Uint8Array,
-  ctx: AudioContext,
-  sampleRate: number,
-  numChannels: number,
-): Promise<AudioBuffer> {
+const decodeAudioData = async (data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> => {
   const dataInt16 = new Int16Array(data.buffer);
   const frameCount = dataInt16.length / numChannels;
   const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
-
   for (let channel = 0; channel < numChannels; channel++) {
     const channelData = buffer.getChannelData(channel);
     for (let i = 0; i < frameCount; i++) {
@@ -64,463 +55,410 @@ async function decodeAudioData(
     }
   }
   return buffer;
-}
-
-function createBlob(data: Float32Array): { data: string; mimeType: string } {
-  const l = data.length;
-  const int16 = new Int16Array(l);
-  for (let i = 0; i < l; i++) {
-    int16[i] = data[i] * 32768;
-  }
-  return {
-    data: encode(new Uint8Array(int16.buffer)),
-    mimeType: 'audio/pcm;rate=16000',
-  };
-}
+};
 
 const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = (reader.result as string).split(',')[1];
-      resolve(base64String);
-    };
+    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
 };
 
-// --- Componentes Principais ---
+// --- Componentes de UI ---
+const NavItem = ({ icon, label, active, onClick, collapsed }: any) => (
+  <button 
+    onClick={onClick} 
+    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 group ${
+      active 
+      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/40 neon-border' 
+      : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+    }`}
+  >
+    <div className={`${active ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>
+      {icon}
+    </div>
+    {!collapsed && <span className="font-semibold whitespace-nowrap text-sm tracking-tight">{label}</span>}
+  </button>
+);
 
 const App = () => {
-  const [activeTab, setActiveTab] = useState<'chat' | 'image' | 'live' | 'video'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'image' | 'video' | 'live'>('chat');
   const [isSidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <div className="flex h-screen w-full bg-slate-950 text-slate-100 overflow-hidden">
+    <div className="flex h-screen w-full bg-[#020617] text-slate-100 overflow-hidden">
       {/* Sidebar */}
-      <aside className={`transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'} glass border-r border-slate-800 flex flex-col`}>
+      <aside className={`transition-all duration-500 ${isSidebarOpen ? 'w-64' : 'w-20'} glass border-r border-slate-800 flex flex-col z-20`}>
         <div className="p-6 flex items-center gap-3">
-          <div className="bg-indigo-600 p-2 rounded-lg shadow-[0_0_15px_rgba(79,70,229,0.4)]">
+          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-2 rounded-xl shadow-lg shadow-indigo-500/20">
             <Cpu size={24} className="text-white" />
           </div>
-          {isSidebarOpen && <span className="font-bold text-xl tracking-tight">Nexus IA</span>}
+          {isSidebarOpen && (
+            <div className="flex flex-col">
+              <span className="font-bold text-xl tracking-tighter leading-none">NEXUS</span>
+              <span className="text-[10px] text-indigo-400 font-bold tracking-[0.2em] uppercase">Multi-Modal</span>
+            </div>
+          )}
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          <NavItem 
-            icon={<MessageSquare size={20} />} 
-            label="Chat" 
-            active={activeTab === 'chat'} 
-            onClick={() => setActiveTab('chat')} 
-            collapsed={!isSidebarOpen}
-          />
-          <NavItem 
-            icon={<ImageIcon size={20} />} 
-            label="Arte" 
-            active={activeTab === 'image'} 
-            onClick={() => setActiveTab('image')} 
-            collapsed={!isSidebarOpen}
-          />
-          <NavItem 
-            icon={<Video size={20} />} 
-            label="Vídeo (Veo)" 
-            active={activeTab === 'video'} 
-            onClick={() => setActiveTab('video')} 
-            collapsed={!isSidebarOpen}
-          />
-          <NavItem 
-            icon={<Mic size={20} />} 
-            label="Voz (Live)" 
-            active={activeTab === 'live'} 
-            onClick={() => setActiveTab('live')} 
-            collapsed={!isSidebarOpen}
-          />
+        <nav className="flex-1 px-4 space-y-2 mt-8">
+          <NavItem icon={<MessageSquare size={20} />} label="Inteligência" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} collapsed={!isSidebarOpen} />
+          <NavItem icon={<ImageIcon size={20} />} label="Laboratório de Arte" active={activeTab === 'image'} onClick={() => setActiveTab('image')} collapsed={!isSidebarOpen} />
+          <NavItem icon={<Video size={20} />} label="Nexus Veo" active={activeTab === 'video'} onClick={() => setActiveTab('video')} collapsed={!isSidebarOpen} />
+          <NavItem icon={<Mic size={20} />} label="Live Voice" active={activeTab === 'live'} onClick={() => setActiveTab('live')} collapsed={!isSidebarOpen} />
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
-          <button 
-            onClick={() => setSidebarOpen(!isSidebarOpen)}
-            className="w-full flex items-center justify-center p-2 hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <Terminal size={18} />
+        <div className="p-4 border-t border-slate-800/50">
+          <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="w-full flex items-center justify-center p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-500 hover:text-slate-200">
+            <ChevronRight size={18} className={`transition-transform duration-500 ${isSidebarOpen ? 'rotate-180' : ''}`} />
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col relative overflow-hidden">
-        {activeTab === 'chat' && <ChatView />}
-        {activeTab === 'image' && <ImageView />}
-        {activeTab === 'live' && <LiveView />}
-        {activeTab === 'video' && <VideoView />}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(79,70,229,0.1),_transparent_50%)] pointer-events-none" />
+        <div className="flex-1 relative z-10 overflow-hidden">
+          {activeTab === 'chat' && <ChatView />}
+          {activeTab === 'image' && <ImageView />}
+          {activeTab === 'video' && <VideoView />}
+          {activeTab === 'live' && <LiveView />}
+        </div>
       </main>
     </div>
   );
 };
 
-const NavItem = ({ icon, label, active, onClick, collapsed }: any) => (
-  <button
-    onClick={onClick}
-    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
-      active 
-        ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-600/30 shadow-[0_0_15px_rgba(79,70,229,0.1)]' 
-        : 'hover:bg-slate-800 text-slate-400'
-    }`}
-  >
-    {icon}
-    {!collapsed && <span className="font-medium whitespace-nowrap">{label}</span>}
-  </button>
-);
-
-// --- Chat View ---
 const ChatView = () => {
   const [messages, setMessages] = useState<{ role: 'user' | 'model', content: string }[]>([
-    { role: 'model', content: 'Olá! Sou o Nexus, seu assistente inteligente. Como posso ajudar você hoje?' }
+    { role: 'model', content: 'Iniciando Nexus... Sistemas operacionais. Como posso ajudar hoje?' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<any>(null);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
-  const handleSend = async () => {
+  const sendMessage = async () => {
     if (!input.trim() || loading) return;
-    const userMsg = input;
+    const msg = input;
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setError(null);
+    setMessages(prev => [...prev, { role: 'user', content: msg }]);
     setLoading(true);
+
     try {
+      if (!process.env.API_KEY) {
+        throw new Error("Chave de API não configurada no Netlify.");
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: userMsg,
-        config: {
-          systemInstruction: 'Você é o Nexus IA, um assistente brasileiro altamente prestativo. Responda em Português Brasileiro.',
-        }
-      });
-      setMessages(prev => [...prev, { role: 'model', content: response.text || '...' }]);
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'model', content: 'Erro na conexão.' }]);
-    } finally { setLoading(false); }
+      if (!chatRef.current) {
+        chatRef.current = ai.chats.create({ 
+          model: 'gemini-3-flash-preview',
+          config: { 
+            systemInstruction: 'Você é o Nexus, uma inteligência avançada. Responda em Português do Brasil com tom tecnológico e prestativo.',
+            temperature: 0.8
+          }
+        });
+      }
+
+      const stream = await chatRef.current.sendMessageStream({ message: msg });
+      let fullContent = '';
+      setMessages(prev => [...prev, { role: 'model', content: '' }]);
+
+      for await (const chunk of stream) {
+        const text = (chunk as GenerateContentResponse).text;
+        fullContent += text;
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1].content = fullContent;
+          return updated;
+        });
+      }
+    } catch (e: any) {
+      console.error(e);
+      setError(e.message || "Falha na comunicação com o servidor Nexus.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="flex flex-col h-full max-w-4xl mx-auto w-full p-4">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-24 pt-4 px-2">
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] p-4 rounded-2xl shadow-lg ${
-              msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'glass text-slate-200 rounded-tl-none border-slate-700'
-            }`}>
-              <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+    <div className="flex flex-col h-full max-w-4xl mx-auto p-4 animate-fade-in">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pb-28 px-2">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+            <div className={`flex gap-4 max-w-[85%] ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg ${m.role === 'user' ? 'bg-indigo-600' : 'bg-slate-900 border border-indigo-500/30'}`}>
+                {m.role === 'user' ? <User size={18} /> : <Cpu size={18} className="text-indigo-400" />}
+              </div>
+              <div className={`p-4 rounded-2xl text-sm leading-relaxed ${m.role === 'user' ? 'bg-indigo-600 text-white shadow-indigo-500/10' : 'glass border-slate-800 text-slate-200'}`}>
+                {m.content || <div className="flex gap-1 py-1"><div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce" /><div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.2s]" /><div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.4s]" /></div>}
+              </div>
             </div>
           </div>
         ))}
-        {loading && <div className="glass p-4 rounded-2xl w-12 flex justify-center"><Loader2 className="animate-spin text-indigo-400" size={20} /></div>}
+        {error && (
+          <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs animate-fade-in">
+            <AlertCircle size={14} />
+            <span>{error}</span>
+          </div>
+        )}
       </div>
-      <div className="absolute bottom-6 left-4 right-4 max-w-4xl mx-auto">
-        <div className="glass border-slate-700 rounded-2xl p-2 flex items-center shadow-2xl">
-          <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="Mensagem..." className="flex-1 bg-transparent border-none focus:ring-0 px-4 text-slate-100" />
-          <button onClick={handleSend} disabled={loading} className="bg-indigo-600 hover:bg-indigo-500 p-3 rounded-xl"><Send size={20} /></button>
+      <div className="absolute bottom-8 left-4 right-4 max-w-4xl mx-auto">
+        <div className="glass border-indigo-500/20 rounded-2xl p-2 flex gap-2 shadow-2xl focus-within:border-indigo-500/50 transition-all">
+          <input 
+            value={input} 
+            onChange={e => setInput(e.target.value)} 
+            onKeyDown={e => e.key === 'Enter' && sendMessage()}
+            placeholder="Comando Nexus..."
+            className="flex-1 bg-transparent border-none px-4 py-3 text-sm focus:outline-none placeholder-slate-600"
+          />
+          <button 
+            onClick={sendMessage} 
+            disabled={loading || !input.trim()} 
+            className="bg-indigo-600 p-3 rounded-xl hover:bg-indigo-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed group"
+          >
+            {loading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-// --- Image View ---
 const ImageView = () => {
   const [prompt, setPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [resultImage, setResultImage] = useState<string | null>(null);
+  const [img, setImg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const generateImage = async () => {
-    if (!prompt.trim() || isGenerating) return;
-    setIsGenerating(true);
-    setResultImage(null);
+  const generate = async () => {
+    if (!prompt.trim() || loading) return;
+    setLoading(true);
+    setImg(null);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
+      const resp = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
-        contents: [{ text: prompt }],
-        config: { imageConfig: { aspectRatio: '1:1' } }
+        contents: [{ text: prompt }]
       });
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) { setResultImage(`data:image/png;base64,${part.inlineData.data}`); break; }
+      for (const part of resp.candidates[0].content.parts) {
+        if (part.inlineData) {
+          setImg(`data:image/png;base64,${part.inlineData.data}`);
+          break;
+        }
       }
-    } catch (err) { alert('Erro na geração.'); } finally { setIsGenerating(false); }
+    } catch (e) {
+      alert("Falha ao processar arte. Verifique a configuração da API.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="flex flex-col items-center h-full p-8 max-w-5xl mx-auto w-full">
-      <header className="text-center mb-8">
-        <h1 className="text-4xl font-bold mb-2 flex items-center justify-center gap-3"><Sparkles className="text-indigo-400" /> Nexus Arte</h1>
-      </header>
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="glass p-6 rounded-3xl border-slate-700 h-fit">
-          <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Descreva sua arte..." className="w-full bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-white min-h-[150px]" />
-          <button onClick={generateImage} disabled={isGenerating || !prompt.trim()} className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold flex items-center justify-center gap-2">
-            {isGenerating ? <Loader2 className="animate-spin" /> : <Zap size={18} />} {isGenerating ? 'Criando...' : 'Gerar'}
+    <div className="p-8 h-full flex flex-col items-center overflow-y-auto animate-fade-in custom-scrollbar">
+      <div className="max-w-2xl w-full text-center mb-10">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-bold uppercase tracking-widest mb-4">
+          <Sparkles size={12} /> Laboratório Visual
+        </div>
+        <h1 className="text-4xl font-black mb-2 text-white tracking-tight">Criação Nexus</h1>
+        <p className="text-slate-500 text-sm">Transforme conceitos em realidade digital.</p>
+      </div>
+      <div className="w-full max-w-2xl space-y-6">
+        <div className="glass p-6 rounded-3xl border-slate-800 space-y-4 shadow-2xl">
+          <textarea 
+            value={prompt} 
+            onChange={e => setPrompt(e.target.value)}
+            placeholder="Descreva a visão artística..."
+            className="w-full bg-slate-900/50 border border-slate-800 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none resize-none h-28 text-slate-200 placeholder-slate-600 transition-all"
+          />
+          <button 
+            onClick={generate} 
+            disabled={loading || !prompt.trim()} 
+            className="w-full bg-indigo-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-indigo-500 transition-all disabled:opacity-30 shadow-lg shadow-indigo-600/20"
+          >
+            {loading ? <Loader2 className="animate-spin" size={20} /> : <Zap size={20} />}
+            {loading ? 'SINTETIZANDO...' : 'EXECUTAR CRIAÇÃO'}
           </button>
         </div>
-        <div className="aspect-square glass rounded-3xl border-slate-700 flex items-center justify-center overflow-hidden">
-          {resultImage ? <img src={resultImage} className="w-full h-full object-cover animate-in fade-in" /> : isGenerating ? <Loader2 className="animate-spin text-indigo-500" size={48} /> : <ImageIcon size={64} className="opacity-20" />}
+        <div className="glass aspect-square rounded-3xl overflow-hidden flex items-center justify-center bg-slate-900/40 border border-slate-800/50 shadow-inner group relative">
+          {img ? (
+            <img src={img} className="w-full h-full object-cover animate-fade-in hover:scale-105 transition-transform duration-700" alt="Output" />
+          ) : (
+            <div className="flex flex-col items-center gap-4 text-slate-700">
+              <ImageIcon size={64} strokeWidth={1} />
+              <span className="text-[10px] uppercase font-black tracking-widest">Aguardando Input</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
-// --- Video View (Nexus Veo) ---
 const VideoView = () => {
   const [image, setImage] = useState<{ base64: string; mime: string } | null>(null);
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState('');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [needsApiKey, setNeedsApiKey] = useState(false);
 
-  useEffect(() => {
-    const checkKey = async () => {
-      const hasKey = await (window as any).aistudio.hasSelectedApiKey();
-      setNeedsApiKey(!hasKey);
-    };
-    checkKey();
-  }, []);
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const base64 = await blobToBase64(file);
-      setImage({ base64, mime: file.type });
-    }
-  };
-
-  const openKeySelection = async () => {
-    await (window as any).aistudio.openSelectKey();
-    setNeedsApiKey(false);
-  };
-
-  const generateVideo = async () => {
+  const generate = async () => {
     if (!image || !prompt.trim() || isGenerating) return;
 
-    // Verificar API Key conforme regras de Veo
-    const hasKey = await (window as any).aistudio.hasSelectedApiKey();
-    if (!hasKey) {
-      await openKeySelection();
+    const as = (window as any).aistudio;
+    if (as && typeof as.hasSelectedApiKey === 'function') {
+      if (!(await as.hasSelectedApiKey())) {
+        if (typeof as.openSelectKey === 'function') await as.openSelectKey();
+      }
     }
 
     setIsGenerating(true);
     setVideoUrl(null);
-    setStatus('Iniciando Alquimia Visual...');
+    setStatus('Iniciando Motor Veo...');
 
     try {
-      // Cria instância do GoogleGenAI imediatamente antes do uso
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      
       let operation;
       try {
         operation = await ai.models.generateVideos({
           model: 'veo-3.1-fast-generate-preview',
-          prompt: prompt,
-          image: {
-            imageBytes: image.base64,
-            mimeType: image.mime
-          },
-          config: {
-            numberOfVideos: 1,
-            resolution: '720p',
-            aspectRatio: '16:9'
-          }
+          prompt,
+          image: { imageBytes: image.base64, mimeType: image.mime },
+          config: { numberOfVideos: 1, resolution: '720p', aspectRatio: '16:9' }
         });
       } catch (err: any) {
-        // Regra obrigatória para erro 404/Entidade não encontrada
-        if (err.message?.includes("Requested entity was not found") || JSON.stringify(err).includes("NOT_FOUND")) {
-          setStatus('Chave de API inválida ou sem permissão. Por favor, selecione uma chave de um projeto GCP pago.');
-          await openKeySelection();
+        if (err.message?.includes("not found") || err.message?.includes("404")) {
+          setStatus('Chave GCP com Billing Necessária.');
+          if (as && typeof as.openSelectKey === 'function') await as.openSelectKey();
           setIsGenerating(false);
           return;
         }
         throw err;
       }
 
-      const messages = [
-        "Interpretando sua visão...",
-        "Moldando o espaço-tempo...",
-        "Colorindo os frames intermediários...",
-        "Finalizando a composição cinemática...",
-        "Quase lá! Polindo os detalhes..."
-      ];
-      let msgIndex = 0;
-
       while (!operation.done) {
-        setStatus(messages[msgIndex % messages.length]);
-        msgIndex++;
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        setStatus("Processando Redes Neurais...");
+        await new Promise(r => setTimeout(r, 10000));
         operation = await ai.operations.getVideosOperation({ operation: operation });
       }
 
-      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-      if (downloadLink) {
-        const videoResponse = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-        const videoBlob = await videoResponse.blob();
-        setVideoUrl(URL.createObjectURL(videoBlob));
-        setStatus('Alquimia concluída com sucesso!');
+      const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
+      if (uri) {
+        const resp = await fetch(`${uri}&key=${process.env.API_KEY}`);
+        const blob = await resp.blob();
+        setVideoUrl(URL.createObjectURL(blob));
+        setStatus('Renderização Completa');
       }
-    } catch (err: any) {
-      console.error(err);
-      setStatus(`Erro: ${err.message || 'Ocorreu um problema na geração.'}`);
+    } catch (e: any) {
+      setStatus('Erro Crítico no Motor');
     } finally {
       setIsGenerating(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-full p-8 max-w-6xl mx-auto w-full overflow-y-auto custom-scrollbar">
-      <header className="text-center mb-10">
-        <h1 className="text-4xl font-bold text-amber-500 mb-2 flex items-center justify-center gap-3">
-          <Video className="text-amber-500" /> Nexus Veo
-        </h1>
-        <p className="text-slate-400">Transforme uma imagem estática em uma jornada cinematográfica.</p>
-        
-        <div className="mt-6 flex flex-col items-center gap-4">
-          <div className="inline-flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 text-amber-500 px-4 py-2 rounded-full text-xs font-semibold">
-            <AlertCircle size={14} /> Requer Chave de API Paga (GCP)
-          </div>
-          
-          {needsApiKey && (
-            <button 
-              onClick={openKeySelection}
-              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-amber-400 px-6 py-2 rounded-xl border border-amber-500/30 transition-all font-bold text-sm"
-            >
-              <Key size={16} /> Configurar Chave de API de Faturamento
-            </button>
-          )}
-          
-          <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="text-xs text-slate-500 underline hover:text-amber-500 transition-colors">
-            Saiba mais sobre o faturamento do Google Cloud
-          </a>
-        </div>
-      </header>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+    <div className="p-8 h-full flex flex-col items-center overflow-y-auto animate-fade-in custom-scrollbar">
+      <div className="max-w-4xl w-full text-center mb-12">
+        <h1 className="text-5xl font-black text-amber-500 mb-2 tracking-tighter italic">Nexus Veo</h1>
+        <p className="text-slate-500 text-sm">Animação Cinematográfica Inteligente</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-10 w-full max-w-6xl">
         <div className="space-y-6">
-          <div className="glass p-8 rounded-3xl border-slate-700 border-dashed border-2 hover:border-amber-500/50 transition-all group relative">
-            {!image ? (
-              <label className="flex flex-col items-center justify-center cursor-pointer py-10">
-                <Upload size={48} className="text-slate-500 group-hover:text-amber-500 transition-colors mb-4" />
-                <span className="text-slate-300 font-medium">Carregar Imagem Base</span>
-                <span className="text-slate-500 text-sm mt-1">PNG, JPG até 10MB</span>
-                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-              </label>
-            ) : (
-              <div className="relative aspect-video rounded-xl overflow-hidden shadow-2xl">
-                <img src={`data:${image.mime};base64,${image.base64}`} className="w-full h-full object-cover" />
-                <button onClick={() => setImage(null)} className="absolute top-2 right-2 bg-red-500 p-2 rounded-full hover:bg-red-600 transition-colors">
-                  <Terminal size={14} />
-                </button>
+          <div className="glass aspect-video rounded-3xl border-dashed border-2 border-slate-700 flex flex-col items-center justify-center p-4 cursor-pointer relative overflow-hidden hover:border-amber-500/50 transition-all group">
+            {image ? (
+              <div className="w-full h-full relative group">
+                <img src={`data:${image.mime};base64,${image.base64}`} className="w-full h-full object-cover rounded-2xl" alt="Base" />
+                <button onClick={() => setImage(null)} className="absolute top-4 right-4 bg-red-500 p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><XCircle size={18}/></button>
               </div>
+            ) : (
+              <label className="flex flex-col items-center gap-4 cursor-pointer w-full h-full justify-center">
+                <div className="p-4 bg-slate-900 rounded-full group-hover:scale-110 transition-transform">
+                  <Upload size={32} className="text-slate-500" />
+                </div>
+                <div className="text-center">
+                  <span className="text-xs text-slate-400 font-bold uppercase tracking-widest block">Upload Frame Zero</span>
+                  <span className="text-[10px] text-slate-600 block mt-1">Formatos sugeridos: JPG, PNG</span>
+                </div>
+                <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (f) setImage({ base64: await blobToBase64(f), mime: f.type });
+                }} />
+              </label>
             )}
           </div>
-
-          <div className="glass p-6 rounded-3xl border-slate-700">
-            <label className="block text-sm font-medium text-amber-500 mb-2 uppercase tracking-wider">Ação e Movimento</label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Ex: faça a pessoa sorrir e o fundo se tornar um pôr do sol mágico com pássaros voando..."
-              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-amber-500 min-h-[120px]"
-            />
-            <button
-              onClick={generateVideo}
-              disabled={isGenerating || !image || !prompt.trim()}
-              className="w-full mt-4 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(217,119,6,0.2)]"
-            >
-              {isGenerating ? <Loader2 className="animate-spin" /> : <Play size={18} fill="currentColor" />}
-              {isGenerating ? 'Alquimizando...' : 'Gerar Vídeo Mágico'}
+          <div className="glass p-5 rounded-3xl space-y-4 shadow-xl">
+            <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Descreva a dinâmica do vídeo..." className="w-full bg-transparent border-none text-slate-200 focus:ring-0 outline-none resize-none h-24 text-sm placeholder-slate-600" />
+            <button onClick={generate} disabled={isGenerating || !image} className="w-full bg-gradient-to-r from-amber-600 to-orange-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all disabled:opacity-30 shadow-lg shadow-amber-600/20 active:scale-95">
+              {isGenerating ? <Loader2 className="animate-spin" size={20} /> : <Play size={20} fill="currentColor" />}
+              {isGenerating ? 'RENDERIZANDO...' : 'INICIAR ENGINE'}
             </button>
           </div>
+          {status && <p className="text-center text-[10px] uppercase font-black text-amber-500 tracking-[0.3em] animate-pulse">{status}</p>}
         </div>
-
-        <div className="flex flex-col gap-6">
-          <div className="aspect-video glass rounded-3xl border-slate-700 flex items-center justify-center overflow-hidden relative shadow-2xl bg-slate-900/40">
-            {videoUrl ? (
-              <video src={videoUrl} controls autoPlay loop className="w-full h-full object-contain" />
-            ) : isGenerating ? (
-              <div className="text-center space-y-6 p-8">
-                <div className="relative w-24 h-24 mx-auto">
-                   <div className="absolute inset-0 border-4 border-amber-500/20 rounded-full"></div>
-                   <div className="absolute inset-0 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-amber-500 font-bold text-xl animate-pulse">{status}</p>
-                  <p className="text-slate-500 text-sm">A geração de vídeo pode levar de 1 a 3 minutos.</p>
-                </div>
-              </div>
-            ) : (
-              <div className="text-slate-600 text-center p-8">
-                <Video size={64} className="mx-auto mb-4 opacity-10" />
-                <p>O resultado da sua alquimia aparecerá aqui</p>
-              </div>
-            )}
-          </div>
-          
-          {videoUrl && (
-            <a 
-              href={videoUrl} 
-              download="nexus-video.mp4"
-              className="glass p-4 rounded-2xl flex items-center justify-center gap-2 text-amber-500 border-amber-500/30 hover:bg-amber-500/10 transition-all font-bold"
-            >
-              <Download size={20} /> Baixar MP4 em Alta Definição
-            </a>
+        <div className="glass aspect-video rounded-3xl flex items-center justify-center bg-black/60 border border-slate-800 shadow-2xl relative overflow-hidden">
+          {videoUrl ? (
+            <video src={videoUrl} controls autoPlay loop className="w-full h-full object-contain" />
+          ) : (
+            <div className="flex flex-col items-center gap-4 text-slate-800">
+               <Video size={64} strokeWidth={1} />
+               <span className="text-[10px] font-black uppercase tracking-[0.2em]">Output Cinematográfico</span>
+            </div>
           )}
+          {isGenerating && <div className="absolute inset-0 bg-indigo-950/20 backdrop-blur-sm flex items-center justify-center flex-col gap-4">
+            <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-[10px] font-bold text-indigo-400 tracking-widest">SINTETIZANDO FRAMES...</span>
+          </div>}
         </div>
       </div>
     </div>
   );
 };
 
-// --- Live View (Voz) ---
 const LiveView = () => {
   const [isActive, setIsActive] = useState(false);
+  const [status, setStatus] = useState('Standby');
   const [transcription, setTranscription] = useState<string[]>([]);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const audioContextRef = useRef<AudioContext | null>(null);
   const sessionRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
-  const stopSession = () => {
-    if (sessionRef.current) { sessionRef.current.close(); sessionRef.current = null; }
-    if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null; }
-    for (const source of sourcesRef.current) source.stop();
+  const stop = () => {
+    if (sessionRef.current) sessionRef.current.close();
+    if (audioContextRef.current) audioContextRef.current.close();
+    sourcesRef.current.forEach(s => s.stop());
     sourcesRef.current.clear();
     setIsActive(false);
-    setIsConnecting(false);
+    setStatus('Encerrado');
   };
 
-  const startSession = async () => {
-    if (isActive) { stopSession(); return; }
-    setIsConnecting(true);
+  const start = async () => {
+    if (isActive) return stop();
+    setStatus('Conectando...');
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const inputCtx = new AudioContext({ sampleRate: 16000 });
       const outputCtx = new AudioContext({ sampleRate: 24000 });
       audioContextRef.current = outputCtx;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
+      
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         callbacks: {
-          onopen: () => { setIsActive(true); setIsConnecting(false); },
-          onmessage: async (msg) => {
-            const base64Audio = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-            if (base64Audio) {
+          onopen: () => { setIsActive(true); setStatus('Transmissão Ativa'); },
+          onmessage: async (m: LiveServerMessage) => {
+            const base64 = m.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            if (base64) {
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
-              const buffer = await decodeAudioData(decode(base64Audio), outputCtx, 24000, 1);
+              const buffer = await decodeAudioData(decode(base64), outputCtx, 24000, 1);
               const source = outputCtx.createBufferSource();
               source.buffer = buffer;
               source.connect(outputCtx.destination);
@@ -528,42 +466,76 @@ const LiveView = () => {
               nextStartTimeRef.current += buffer.duration;
               sourcesRef.current.add(source);
             }
-            if (msg.serverContent?.inputTranscription) setTranscription(p => [...p.slice(-5), `Você: ${msg.serverContent.inputTranscription.text}`]);
-            if (msg.serverContent?.outputTranscription) setTranscription(p => [...p.slice(-5), `Nexus: ${msg.serverContent.outputTranscription.text}`]);
+            if (m.serverContent?.inputTranscription) setTranscription(p => [...p.slice(-5), `Você: ${m.serverContent?.inputTranscription?.text}`]);
+            if (m.serverContent?.outputTranscription) setTranscription(p => [...p.slice(-5), `Nexus: ${m.serverContent?.outputTranscription?.text}`]);
           },
-          onclose: () => stopSession(),
-          onerror: () => stopSession()
+          onclose: () => stop(),
+          onerror: (e) => { console.error(e); stop(); }
         },
         config: {
           responseModalities: [Modality.AUDIO],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } },
-          inputAudioTranscription: {}, outputAudioTranscription: {}
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } }
         }
       });
       sessionRef.current = await sessionPromise;
-      
       const source = inputCtx.createMediaStreamSource(stream);
       const processor = inputCtx.createScriptProcessor(4096, 1, 1);
       processor.onaudioprocess = (e) => {
-        const pcm = createBlob(e.inputBuffer.getChannelData(0));
-        sessionRef.current?.sendRealtimeInput({ media: pcm });
+        if (!isActive) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        const int16 = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) int16[i] = inputData[i] * 32768;
+        sessionRef.current?.sendRealtimeInput({ media: { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } });
       };
-      source.connect(processor);
-      processor.connect(inputCtx.destination);
-      
-    } catch (err) { setIsConnecting(false); }
+      source.connect(processor); processor.connect(inputCtx.destination);
+    } catch (e) { 
+      setStatus('Erro Periférico'); 
+      console.error(e);
+    }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-8">
-      <div className={`w-48 h-48 rounded-full mb-8 flex items-center justify-center relative ${isActive ? 'bg-indigo-600/20' : 'bg-slate-900'}`}>
-        {isActive && <div className="absolute inset-0 rounded-full border-4 border-indigo-500 animate-ping opacity-20"></div>}
-        <button onClick={startSession} className={`z-10 w-24 h-24 rounded-full flex items-center justify-center transition-all ${isActive ? 'bg-red-500' : 'bg-indigo-600'}`}>
-          {isConnecting ? <Loader2 className="animate-spin" /> : isActive ? <MicOff size={40} /> : <Mic size={40} />}
+    <div className="h-full flex flex-col items-center justify-center p-8 animate-fade-in relative">
+      <div className="absolute top-12 text-center">
+        <h2 className="text-3xl font-black text-white tracking-tighter uppercase mb-2">Nexus Live Audio</h2>
+        <p className="text-slate-500 text-xs tracking-widest uppercase">Protocolo de Voz Real-time</p>
+      </div>
+
+      <div className="relative group">
+         <div className={`absolute inset-0 rounded-full blur-3xl transition-all duration-1000 ${isActive ? 'bg-indigo-500/30 scale-150' : 'bg-transparent'}`} />
+         <button 
+          onClick={start} 
+          className={`w-48 h-48 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl relative z-10 border-4 ${
+            isActive ? 'bg-indigo-600 border-indigo-400 scale-95 shadow-indigo-500/40' : 'bg-slate-900 border-slate-800 hover:border-indigo-500/50'
+          }`}
+        >
+          {isActive ? <MicOff size={64} className="text-white" /> : <Mic size={64} className="text-indigo-400" />}
+          {isActive && (
+            <>
+              <div className="absolute inset-0 rounded-full border-2 border-indigo-400 animate-ping opacity-50" />
+              <div className="absolute inset-0 rounded-full border-4 border-indigo-400/20 animate-pulse" />
+            </>
+          )}
         </button>
       </div>
-      <div className="w-full max-w-2xl glass rounded-2xl p-6 h-64 overflow-y-auto">
-        {transcription.map((t, i) => <div key={i} className="mb-2 text-sm">{t}</div>)}
+
+      <div className="mt-20 w-full max-w-lg glass rounded-3xl p-8 min-h-[220px] flex flex-col gap-6 border border-slate-800 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-white/5 pb-4">
+           <div className="flex items-center gap-2 text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em]">
+            <Volume2 size={14} /> {status}
+          </div>
+          {isActive && <div className="flex gap-1"><div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" /></div>}
+        </div>
+        <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar max-h-40">
+          {transcription.map((t, i) => (
+            <div key={i} className={`text-xs animate-fade-in ${t.startsWith('Você') ? 'text-slate-500' : 'text-white font-semibold pl-2 border-l-2 border-indigo-500'}`}>
+              {t}
+            </div>
+          ))}
+          {transcription.length === 0 && <p className="text-slate-700 italic text-[10px] text-center pt-10 uppercase tracking-widest font-black">Aguardando Frequência...</p>}
+        </div>
       </div>
     </div>
   );
