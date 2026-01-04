@@ -23,7 +23,9 @@ import {
   Volume2,
   User,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Settings,
+  ShieldCheck
 } from 'lucide-react';
 
 // --- Utilitários de Áudio ---
@@ -66,6 +68,65 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
+// --- Componente de Guia de Configuração ---
+const ConfigGuide = () => (
+  <div className="min-h-screen flex items-center justify-center p-6 bg-[#020617]">
+    <div className="max-w-md w-full glass p-8 rounded-3xl border-indigo-500/30 shadow-2xl animate-fade-in">
+      <div className="flex justify-center mb-6">
+        <div className="bg-indigo-600/20 p-4 rounded-2xl">
+          <Settings size={40} className="text-indigo-400 animate-spin-slow" />
+        </div>
+      </div>
+      <h1 className="text-2xl font-bold text-center mb-2">Configuração Necessária</h1>
+      <p className="text-slate-400 text-center text-sm mb-8">
+        Detectamos que a sua chave de API ainda não foi configurada corretamente no Netlify.
+      </p>
+      
+      <div className="space-y-4">
+        <div className="flex gap-4 items-start">
+          <div className="w-6 h-6 rounded-full bg-indigo-600 flex-shrink-0 flex items-center justify-center text-xs font-bold">1</div>
+          <div>
+            <p className="text-sm font-semibold">No Netlify, vá em:</p>
+            <p className="text-xs text-slate-500 italic">Site Settings > Environment Variables</p>
+          </div>
+        </div>
+        
+        <div className="flex gap-4 items-start">
+          <div className="w-6 h-6 rounded-full bg-indigo-600 flex-shrink-0 flex items-center justify-center text-xs font-bold">2</div>
+          <div>
+            <p className="text-sm font-semibold">Crie uma nova variável:</p>
+            <div className="mt-2 space-y-1">
+              <div className="flex justify-between bg-slate-900 p-2 rounded border border-slate-800">
+                <span className="text-[10px] text-slate-500 uppercase font-bold">Key:</span>
+                <span className="text-[10px] text-indigo-400 font-mono">API_KEY</span>
+              </div>
+              <div className="flex justify-between bg-slate-900 p-2 rounded border border-slate-800">
+                <span className="text-[10px] text-slate-500 uppercase font-bold">Value:</span>
+                <span className="text-[10px] text-green-400 font-mono">AIzaSy...rs</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-4 items-start">
+          <div className="w-6 h-6 rounded-full bg-indigo-600 flex-shrink-0 flex items-center justify-center text-xs font-bold">3</div>
+          <div>
+            <p className="text-sm font-semibold">Salve e faça o Deploy:</p>
+            <p className="text-xs text-slate-500">O Nexus será ativado automaticamente assim que o Netlify injetar a chave.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 pt-6 border-t border-slate-800">
+        <div className="flex items-center gap-2 text-green-500 justify-center">
+          <ShieldCheck size={16} />
+          <span className="text-[10px] font-bold uppercase tracking-widest">Conexão Segura Ativada</span>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 // --- Componentes de UI ---
 const NavItem = ({ icon, label, active, onClick, collapsed }: any) => (
   <button 
@@ -86,6 +147,11 @@ const NavItem = ({ icon, label, active, onClick, collapsed }: any) => (
 const App = () => {
   const [activeTab, setActiveTab] = useState<'chat' | 'image' | 'video' | 'live'>('chat');
   const [isSidebarOpen, setSidebarOpen] = useState(true);
+
+  // Se a API_KEY não existir, mostramos o guia de configuração
+  if (!process.env.API_KEY) {
+    return <ConfigGuide />;
+  }
 
   return (
     <div className="flex h-screen w-full bg-[#020617] text-slate-100 overflow-hidden">
@@ -154,11 +220,7 @@ const ChatView = () => {
     setLoading(true);
 
     try {
-      if (!process.env.API_KEY) {
-        throw new Error("Chave de API não configurada no Netlify.");
-      }
-
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       if (!chatRef.current) {
         chatRef.current = ai.chats.create({ 
           model: 'gemini-3-flash-preview',
@@ -184,7 +246,7 @@ const ChatView = () => {
       }
     } catch (e: any) {
       console.error(e);
-      setError(e.message || "Falha na comunicação com o servidor Nexus.");
+      setError("Falha na comunicação com o servidor Nexus. Verifique se a cota da sua API Key não expirou.");
     } finally {
       setLoading(false);
     }
@@ -244,7 +306,7 @@ const ImageView = () => {
     setLoading(true);
     setImg(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const resp = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: [{ text: prompt }]
@@ -325,7 +387,7 @@ const VideoView = () => {
     setStatus('Iniciando Motor Veo...');
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       let operation;
       try {
         operation = await ai.models.generateVideos({
@@ -444,7 +506,7 @@ const LiveView = () => {
     if (isActive) return stop();
     setStatus('Conectando...');
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const inputCtx = new AudioContext({ sampleRate: 16000 });
       const outputCtx = new AudioContext({ sampleRate: 24000 });
       audioContextRef.current = outputCtx;
